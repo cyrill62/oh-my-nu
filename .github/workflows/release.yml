@@ -1,0 +1,66 @@
+# Publishes a GitHub release with a download-only archive when a version tag is pushed:
+#   tools/set-version.nu 0.2.0 && git commit -am "Release 0.2.0" && git tag v0.2.0 && git push --follow-tags
+# The archives leave out the documentation (the root *.md files), the website (www/)
+# and the CI files (.github/): everything else is what a user needs to run oh-my-nu.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches VERSION and oh-my-nu.nu
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          code=$(sed -n 's/^const VERSION = "\(.*\)"$/\1/p' oh-my-nu.nu)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match VERSION ($version)"; exit 1
+          fi
+          if [ "$code" != "$version" ]; then
+            echo "::error::oh-my-nu.nu has $code, VERSION has $version: run tools/set-version.nu"; exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build the archives
+        run: |
+          name="oh-my-nu-$VERSION"
+          mkdir -p dist
+          # top+glob: only the *.md files at the root (glob's * does not cross /).
+          exclude=(':(exclude)www' ':(exclude).github' ':(top,exclude,glob)*.md')
+          git archive --format=tar.gz --prefix="$name/" -o "dist/$name.tar.gz" HEAD -- . "${exclude[@]}"
+          git archive --format=zip --prefix="$name/" -o "dist/$name.zip" HEAD -- . "${exclude[@]}"
+
+          # Guard against the pathspecs silently changing meaning.
+          files=$(tar -tzf "dist/$name.tar.gz")
+          if grep -E "^$name/([^/]+\.md|www/|\.github/)" <<<"$files"; then
+            echo "::error::the archive contains files it should leave out"; exit 1
+          fi
+          for needed in oh-my-nu.nu install.nu VERSION lib/root.nu plugins/git.nu; do
+            grep -qx "$name/$needed" <<<"$files" || { echo "::error::$needed is missing from the archive"; exit 1; }
+          done
+
+          cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Re-run of the workflow: replace the files of the existing release.
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --verify-tag --generate-notes \
+              --title "oh-my-nu $VERSION" "${prerelease[@]}"
+          fi

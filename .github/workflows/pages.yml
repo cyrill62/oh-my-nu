@@ -1,0 +1,73 @@
+# Builds the website in www/ and publishes it to GitHub Pages.
+# One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # The site reads the plugins, VERSION, COVERAGE.md and the test list at build time.
+      - www/**
+      - plugins/**
+      - VERSION
+      - COVERAGE.md
+      - tests/run.nu
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - www/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: www
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: www/package-lock.json
+
+      - id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+      - run: npm run typecheck
+
+      - run: npm run build
+        env:
+          # "/<repository>/" for a project site; pull requests build for "/".
+          BASE_URL: ${{ steps.pages.outputs.base_path }}/
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: www/dist/client
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

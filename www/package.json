@@ -1,0 +1,28 @@
+{
+  "name": "oh-my-nu-www",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vike dev",
+    "build": "vike build",
+    "preview": "vike preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "i18next": "26.5.11",
+    "motion": "14.7.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-i18next": "17.1.9",
+    "vike": "0.4.268",
+    "vike-react": "0.6.32"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  }
+}

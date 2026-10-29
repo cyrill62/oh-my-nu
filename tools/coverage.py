@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Rebuild COVERAGE.md: what oh-my-nu does with each Oh My Zsh plugin.
+
+Usage: tools/coverage.py [OMZ_DIR] > COVERAGE.md   (default: ~/.oh-my-zsh)
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+omz = os.path.join(os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else "~/.oh-my-zsh"), "plugins")
+plugins = sorted(p for p in os.listdir(omz) if os.path.isdir(os.path.join(omz, p)))
+ours = {f[:-3]: open(os.path.join(ROOT, "plugins", f)).read() for f in os.listdir(os.path.join(ROOT, "plugins")) if f.endswith(".nu")}
+
+COVERED = {
+    "archlinux": "`pacman` + `yay`", "debian": "`apt` + `dpkg`", "ubuntu": "`apt` + `dpkg`",
+    "docker-compose": "`docker` (`dco`, `dcup`...)", "common-aliases": "`common`",
+    "tmux": "`rmux` (falls back to tmux)", "pip": "`python` (`pipi`, `pipu`...)", "uv": "`python` (`uvr`, `uva`...)",
+    "virtualenv": "`python` (`mkv`)", "history": "`common` (`h`, `hs`)", "wd": "`jump`",
+    "copyfile": "`copypath` (`copyfile`)", "copybuffer": "`copypath` (`copyout` for pipelines)",
+    "rust": "`cargo`", "systemadmin": "`common` (`psg`, `dus`, `lsz`)", "git-flow": "`git-flow-avh` (the AVH edition is a superset)",
+    "alias-finder": "`omn aliases` (a searchable table)", "aliases": "`omn aliases`",
+    "git-extras": "`git` helpers (`gbda`, `glt`...)", "laravel4": "`laravel`", "laravel5": "`laravel`",
+    "symfony": "`symfony2` (`sf`...)", "symfony6": "`symfony2` (`sf`...)", "mix-fast": "nushell completes `mix` through an external completer",
+}
+NATIVE = {
+    "zoxide": "`zoxide init nushell`", "z": "zoxide's nushell support", "autojump": "zoxide's nushell support",
+    "fasd": "zoxide's nushell support", "starship": "`starship init nu`", "mise": "`mise activate nu`",
+    "direnv": "direnv's nushell hook", "fzf": "nushell's fuzzy history (ctrl+r) and menus",
+    "colorize": "`open FILE` / `bat`", "dirhistory": "`cd -` and std `dirs`", "dirpersist": "std `dirs`",
+    "procs": "`ps` is already a table", "cp": "`cp --progress`", "httpie": "`http get/post`",
+    "command-not-found": "`$env.config.hooks.command_not_found`", "jsontools": "also built in: `from json`, `to json`",
+    "urltools": "also built in: `url encode`", "encode64": "also built in: `encode base64`",
+    "nvm": "nvm has no nushell support: use `fnm` or `mise`", "nodenv": "use `mise activate nu`",
+    "pyenv": "use `mise activate nu` or uv", "rbenv": "use `mise activate nu`", "jenv": "use `mise activate nu`",
+    "chruby": "use `mise activate nu`", "rvm": "use `mise activate nu`", "virtualenvwrapper": "`overlay use .venv/bin/activate.nu`, or `uv-env`",
+    "conda-env": "conda's own `conda init nu`",
+}
+ZSH_ONLY = set("""autoenv battery bgnotify branch colemak compleat dircycle emoji emoji-clock emotty fancy-ctrl-z fastfile fbterm
+    git-auto-fetch git-escape-magic git-prompt gitfast globalias history-substring-search kube-ps1 kubectx magic-enter man
+    per-directory-history percol safe-paste scd screen shrink-path singlechar spackenv sudo svn svn-fast-info term_tab themes
+    thefuck timer tldr vagrant-prompt vi-mode zbell zsh-autocomplete zsh-autosuggestions zsh-interactive-cd
+    zsh-navigation-tools zsh-syntax-highlighting last-working-dir fossil foot octozen vundle""".split())
+MACOS = set("""apache2-macports bbedit brew cask dash droplr forklift iterm2 macos macports marked2 marktext mysql-macports
+    pod textastic textmate xcode swiftpm gnu-utils postgres pow powder powify terminitor tugboat""".split())
+REASONS = {
+    "appsignal-cli": "completion and a token helper", "coffee": "its function compiles via the coffee REPL",
+    "eecms": "ExpressionEngine-specific path functions", "kamal": "its alias needs a function that finds the kamal binstub",
+    "lighthouse": "a single URL helper for an obsolete service", "shopify": "functions tied to Shopify's zsh setup",
+    "vim-interaction": "drives a running gvim through zsh functions", "please": "the `please` alias needs zsh's history",
+    "cake": "completion cache", "cabal": "completion", "grails": "completion", "grunt": "completion cache",
+    "gulp": "completion", "rake-fast": "completion cache", "paver": "completion", "phing": "completion",
+    "jake-node": "completion", "knife_ssh": "completion", "capistrano": "completion", "scw": "completion",
+    "sdk": "completion", "sigstore": "completion", "yii2": "completion", "jfrog": "completion",
+    "lxd": "completion only", "homestead": "completion only", "aws": "", "rand-quote": "",
+}
+
+completion_only, rows = [], {k: [] for k in ["hand", "generated", "covered", "native", "completion", "zsh", "macos", "todo"]}
+for p in plugins:
+    src = ""
+    for f in os.listdir(os.path.join(omz, p)):
+        if f.endswith(".zsh") or f.endswith(".sh"):
+            src += open(os.path.join(omz, p, f), errors="replace").read()
+    has_code = re.search(r"(?m)^\s*alias\s|^\s*(function\s+[\w:.-]+|[\w:.-]+\s*\(\)\s*\{?)", src)
+    if p in ours:
+        rows["generated" if "generated by tools/port-omz.py" in ours[p] else "hand"].append(p)
+    elif p in COVERED:
+        rows["covered"].append(p)
+    elif p in NATIVE:
+        rows["native"].append(p)
+    elif p in ZSH_ONLY:
+        rows["zsh"].append(p)
+    elif p in MACOS:
+        rows["macos"].append(p)
+    elif not has_code or REASONS.get(p, "").startswith("completion"):
+        rows["completion"].append(p)
+    else:
+        rows["todo"].append(p)
+
+def names(ps):
+    return ", ".join(f"`{p}`" for p in ps)
+
+def partial(p):
+    text = ours[p]
+    notes = []
+    m = re.search(r"(?m)^# not ported: (.*)$", text)
+    if m:
+        notes.append(f"{len(m.group(1).split('; '))} aliases skipped")
+    m = re.search(r"(?m)^# Oh My Zsh functions not ported: (.*)$", text)
+    if m:
+        notes.append("functions: " + m.group(1))
+    n = len(re.findall(r"(?m)^export ", text))
+    return n, "; ".join(notes)
+
+out = [
+    "# Oh My Zsh plugin coverage", "",
+    f"What oh-my-nu does with each of Oh My Zsh's {len(plugins)} plugins. Generated by `tools/coverage.py`.", "",
+    "| | Plugins |", "| --- | --- |",
+    f"| Ported individually | {len(rows['hand'])} |",
+    f"| Ported automatically from their aliases (`tools/port-omz.py`) | {len(rows['generated'])} |",
+    f"| Covered by another oh-my-nu plugin | {len(rows['covered'])} |",
+    f"| Built into nushell, or the tool supports nushell itself | {len(rows['native'])} |",
+    f"| Completion only | {len(rows['completion'])} |",
+    f"| zsh prompt, key bindings or line editor | {len(rows['zsh'])} |",
+    f"| macOS only | {len(rows['macos'])} |",
+    f"| Not ported | {len(rows['todo'])} |", "",
+    f"## Ported individually ({len(rows['hand'])})", "", names(rows["hand"]), "",
+    f"## Ported automatically ({len(rows['generated'])})", "",
+    "Their aliases were converted by `tools/port-omz.py`: plain aliases became nushell aliases; aliases using shell syntax (pipes, `&&`, `$VARS`) became commands that run the original text with bash, with your arguments appended as in zsh. Aliases that depend on Oh My Zsh's own functions or variables were skipped; each file's header lists what was left out.", "",
+    "| Plugin | Aliases and commands | Not ported |", "| --- | --- | --- |",
+]
+for p in rows["generated"]:
+    n, notes = partial(p)
+    out.append(f"| `{p}` | {n} | {notes} |")
+out += ["", f"## Covered by another oh-my-nu plugin ({len(rows['covered'])})", "", "| Oh My Zsh | oh-my-nu |", "| --- | --- |"]
+out += [f"| `{p}` | {COVERED[p]} |" for p in rows["covered"]]
+out += ["", f"## Built into nushell, or the tool supports nushell ({len(rows['native'])})", "", "| Oh My Zsh | in nushell |", "| --- | --- |"]
+out += [f"| `{p}` | {NATIVE[p]} |" for p in rows["native"]]
+out += ["", f"## Completion only ({len(rows['completion'])})", "",
+        "These only add zsh completions. Nushell can complete external commands through an external completer such as [carapace](https://carapace.sh), which covers most of these tools.", "",
+        names(rows["completion"]), "",
+        f"## zsh prompt, key bindings or line editor ({len(rows['zsh'])})", "",
+        "They change zsh itself (ZLE widgets, prompt segments, terminal titles). Nushell's equivalents are configuration in `$env.config` (keybindings, menus, hooks, prompt), not alias plugins.", "",
+        names(rows["zsh"]), "",
+        f"## macOS only ({len(rows['macos'])})", "", names(rows["macos"]), ""]
+out += [f"## Not ported ({len(rows['todo'])})", ""]
+if rows["todo"]:
+    out += ["| Plugin | Why |", "| --- | --- |"] + [f"| `{p}` | {REASONS.get(p) or 'not ported yet'} |" for p in rows["todo"]]
+out.append("")
+print("\n".join(out))
