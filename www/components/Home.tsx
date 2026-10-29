@@ -9,8 +9,8 @@ import { Terminal } from './Terminal'
 
 const BASE = import.meta.env.BASE_URL
 const REPO = 'https://github.com/cyrill62/oh-my-nu'
-const INSTALL_DIR = '~/.local/share/oh-my-nu'
-const STEPS = [`git clone ${REPO} ${INSTALL_DIR}`, `nu ${INSTALL_DIR}/install.nu`, 'omn list --enabled']
+const INSTALLER = 'https://cyrill62.github.io/oh-my-nu/install.nu'
+const STEPS = [`nu -c (http get ${INSTALLER})`, 'omn enable git cargo', 'omn list --enabled']
 
 export function Home() {
   const { t, i18n } = useTranslation()

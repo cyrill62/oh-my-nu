@@ -532,6 +532,55 @@ esac
     }
 }
 
+# The web installer (www/public/install.nu), on a local fake release.
+def test-get [dir: path] {
+    let version = "9.9.9"
+    let name = $"oh-my-nu-($version)"
+    let release = $dir | path join release
+    let src = $dir | path join src | path join $name
+    mkdir $release $src
+    for item in [oh-my-nu.nu install.nu VERSION lib plugins] { cp --recursive ($ROOT | path join $item) $src }
+    ^tar -czf ($release | path join $"($name).tar.gz") -C ($src | path dirname) $name
+    let sum = open --raw ($release | path join $"($name).tar.gz") | hash sha256
+    $"($sum)  ($name).tar.gz\n" | save ($release | path join SHA256SUMS)
+
+    let home = $dir | path join share/oh-my-nu
+    let cfg = $dir | path join cfg
+    let vars = {OMN_HOME: $home, OMN_VERSION: $"v($version)", OMN_RELEASE_DIR: $release, OMN_CONFIG_DIR: $cfg, OMN_AUTOLOAD_FILE: ($dir | path join autoload/oh-my-nu.nu)}
+    let installer = $ROOT | path join www/public/install.nu
+    # Run as documented: nu -c (http get .../install.nu)
+    let get = {|extra = {}| with-env ($vars | merge {HOME: $env.OMN_TEST_HOME} | merge $extra) { ^$nu.current-exe --no-config-file --commands (open --raw $installer) | complete } }
+
+    let first = do $get
+    assert equal $first.exit_code 0 $first.stderr
+    assert str contains $first.stdout $"oh-my-nu ($version) is in ($home)"
+    assert ($home | path join plugins/git.nu | path exists)
+    assert equal (open ($cfg | path join plugins.nuon)) [common]
+    assert str contains (open --raw ($dir | path join autoload/oh-my-nu.nu)) ($home | path join plugins/common.nu)
+
+    # An update replaces the files and keeps the enabled plugins.
+    nu-run $"$env.OMN_CONFIG_DIR = ($cfg | to nuon); $env.OMN_AUTOLOAD_FILE = ($dir | path join autoload/oh-my-nu.nu | to nuon); use ($home | path join oh-my-nu.nu | to nuon) *; omn enable git" | ignore
+    "x" | save ($home | path join stale)
+    let second = do $get
+    assert equal $second.exit_code 0 $second.stderr
+    assert not ($home | path join stale | path exists)
+    assert equal (open ($cfg | path join plugins.nuon)) [common git]
+
+    # A bad checksum leaves the install alone.
+    "x" | save ($home | path join keep)
+    $"('' | fill --character 0 --width 64)  ($name).tar.gz\n" | save --force ($release | path join SHA256SUMS)
+    let bad = do $get
+    assert not equal $bad.exit_code 0
+    assert str contains $bad.stderr "checksum mismatch"
+    assert ($home | path join keep | path exists)
+
+    # Never replaces a directory that isn't oh-my-nu.
+    let other = $dir | path join other
+    mkdir $other
+    let refused = do $get {OMN_HOME: $other}
+    assert str contains $refused.stderr "is not oh-my-nu"
+}
+
 def main [] {
     let dir = $env.OMN_TEST_DIR? | default (mktemp --directory)
     mkdir $dir
@@ -549,6 +598,7 @@ def main [] {
         [utils, {|| test-utils ($dir | path join utils-test) }]
         [git-flow, {|| test-git-flow ($dir | path join git-flow-test) }]
         [ports, {|| test-ports ($dir | path join ports-test) }]
+        [get, {|| test-get ($dir | path join get-test) }]
     ]
     let failed = $tests | each {|t|
         try {

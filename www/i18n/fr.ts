@@ -103,11 +103,11 @@ export const fr: Resources = {
     title: 'Démarrer',
     subtitle: 'Nécessite Nushell 0.116 ou plus récent. Rien n’est écrit dans config.nu.',
     steps: [
-      { title: 'Cloner', text: 'Placez oh-my-nu où vous voulez.' },
       {
         title: 'Installer',
-        text: 'Active une sélection par défaut. Donnez des noms de plugins pour choisir les vôtres.',
+        text: 'Télécharge la dernière version dans ~/.local/share/oh-my-nu et active une sélection par défaut. Relancez-le pour mettre à jour.',
       },
+      { title: 'Choisir vos plugins', text: 'Activez-en d’autres, ou désactivez-en avec omn disable.' },
       { title: 'Ouvrir un nouveau shell', text: 'Puis explorez avec omn list et omn help.' },
     ],
   },

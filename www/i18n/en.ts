@@ -101,11 +101,11 @@ export const en = {
     title: 'Get started',
     subtitle: 'Needs Nushell 0.116 or newer. Nothing is written to config.nu.',
     steps: [
-      { title: 'Clone', text: 'Put oh-my-nu anywhere you like.' },
       {
         title: 'Install',
-        text: 'Enables a sensible default set. Pass plugin names to pick your own.',
+        text: 'Downloads the latest release into ~/.local/share/oh-my-nu and enables a sensible default set. Run it again to update.',
       },
+      { title: 'Pick your plugins', text: 'Enable more, or disable some with omn disable.' },
       { title: 'Open a new shell', text: 'Then explore with omn list and omn help.' },
     ],
   },

@@ -15,15 +15,22 @@ Website: <https://cyrill62.github.io/oh-my-nu/>
 
 ## Install
 
-Download `oh-my-nu-VERSION.tar.gz` (or `.zip`) from the
-[releases](https://github.com/cyrill62/oh-my-nu/releases) and unpack it, or
-clone the repository. The release archives hold only what runs: no
-documentation, no website.
+In nushell:
 
 ```nu
-nu ~/Projects/perso/rmux-tools/oh-my-nu/install.nu            # the default set (see install.nu)
-nu ~/Projects/perso/rmux-tools/oh-my-nu/install.nu git cargo  # or pick plugins
+nu -c (http get https://cyrill62.github.io/oh-my-nu/install.nu)
+omn enable git cargo   # optional: more plugins than the default set (see install.nu)
 ```
+
+The installer ([www/public/install.nu](www/public/install.nu)) downloads the
+latest [release](https://github.com/cyrill62/oh-my-nu/releases), checks its
+SHA256 sum, unpacks it into `~/.local/share/oh-my-nu` (`OMN_HOME` to change
+it) and runs its `install.nu`. Run it again to update: the enabled plugins
+are kept. The release archives hold only what runs: no documentation, no
+website.
+
+You can also unpack a release or clone the repository yourself, then run
+`nu path/to/oh-my-nu/install.nu [PLUGIN...]`.
 
 then open a new shell. Nothing is added to `config.nu`: the enabled plugins
 are written as `use` lines to `~/.config/nushell/autoload/oh-my-nu.nu`,
