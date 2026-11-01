@@ -1,6 +1,7 @@
-# description: helm shortcuts (Oh My Zsh's helm names, without `h`)
+# description: helm shortcuts (Oh My Zsh's helm names)
 # requires: helm
 
+export alias h = helm
 export alias hin = helm install
 export alias hun = helm uninstall
 export alias hse = helm search

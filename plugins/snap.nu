@@ -6,7 +6,7 @@ use ../lib/root.nu [as-root]
 export alias sv = snap version
 export alias sf = snap find
 export alias sin = snap info
-export alias sls = snap list
+export alias sl = snap list
 export alias schg = snap changes
 
 # Install snaps
@@ -22,7 +22,7 @@ export def --wrapped sref [...args] { as-root snap refresh ...$args }
 export def --wrapped srev [...args] { as-root snap revert ...$args }
 
 # Enable a snap
-export def --wrapped sen [...args] { as-root snap enable ...$args }
+export def --wrapped se [...args] { as-root snap enable ...$args }
 
 # Disable a snap
-export def --wrapped sdis [...args] { as-root snap disable ...$args }
+export def --wrapped sd [...args] { as-root snap disable ...$args }

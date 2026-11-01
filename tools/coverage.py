@@ -16,10 +16,10 @@ ours = {f[:-3]: open(os.path.join(ROOT, "plugins", f)).read() for f in os.listdi
 COVERED = {
     "archlinux": "`pacman` + `yay`", "debian": "`apt` + `dpkg`", "ubuntu": "`apt` + `dpkg`",
     "docker-compose": "`docker` (`dco`, `dcup`...)", "common-aliases": "`common`",
-    "tmux": "`rmux` (falls back to tmux)", "pip": "`python` (`pipi`, `pipu`...)", "uv": "`python` (`uvr`, `uva`...)",
-    "virtualenv": "`python` (`mkv`)", "history": "`common` (`h`, `hs`)", "wd": "`jump`",
+    "tmux": "`rmux` (falls back to tmux)", "pip": "`python` (`pipi`, `pipu`, `pipreq`...)", "uv": "`python` (`uvr`, `uva`...)",
+    "virtualenv": "`python` (`mkv`)", "history": "`common` (`h`, `hs`, `hsi`, `hl`)", "wd": "`jump`",
     "copyfile": "`copypath` (`copyfile`)", "copybuffer": "`copypath` (`copyout` for pipelines)",
-    "rust": "`cargo`", "systemadmin": "`common` (`psg`, `dus`, `lsz`)", "git-flow": "`git-flow-avh` (the AVH edition is a superset)",
+    "rust": "`cargo`", "systemadmin": "`common` (`psmem`, `pscpu`, `pszombie`, `hist10`...)", "git-flow": "`git-flow-avh` (the AVH edition is a superset)",
     "alias-finder": "`omn aliases` (a searchable table)", "aliases": "`omn aliases`",
     "git-extras": "`git` helpers (`gbda`, `glt`...)", "laravel4": "`laravel`", "laravel5": "`laravel`",
     "symfony": "`symfony2` (`sf`...)", "symfony6": "`symfony2` (`sf`...)", "mix-fast": "nushell completes `mix` through an external completer",
@@ -45,10 +45,7 @@ ZSH_ONLY = set("""autoenv battery bgnotify branch colemak compleat dircycle emoj
 MACOS = set("""apache2-macports bbedit brew cask dash droplr forklift iterm2 macos macports marked2 marktext mysql-macports
     pod textastic textmate xcode swiftpm gnu-utils postgres pow powder powify terminitor tugboat""".split())
 REASONS = {
-    "appsignal-cli": "completion and a token helper", "coffee": "its function compiles via the coffee REPL",
-    "eecms": "ExpressionEngine-specific path functions", "kamal": "its alias needs a function that finds the kamal binstub",
-    "lighthouse": "a single URL helper for an obsolete service", "shopify": "functions tied to Shopify's zsh setup",
-    "vim-interaction": "drives a running gvim through zsh functions", "please": "the `please` alias needs zsh's history",
+    "please": "the `please` alias needs zsh's history",
     "cake": "completion cache", "cabal": "completion", "grails": "completion", "grunt": "completion cache",
     "gulp": "completion", "rake-fast": "completion cache", "paver": "completion", "phing": "completion",
     "jake-node": "completion", "knife_ssh": "completion", "capistrano": "completion", "scw": "completion",

@@ -38,3 +38,5 @@ export def main [
         }
     }
 }
+
+export alias x = main

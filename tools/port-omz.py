@@ -6,8 +6,11 @@ Usage: tools/port-omz.py OMZ_PLUGINS_DIR PLUGIN... > report.tsv
 Simple aliases become nushell aliases. Aliases using shell syntax (pipes,
 &&, $VARS...) become `--wrapped` commands that run the original text with
 bash (or zsh for zsh-only syntax), with the arguments appended like zsh does.
-Aliases that need Oh My Zsh's own functions, global aliases and names that
-would shadow a nushell command are skipped and listed in the file header.
+Aliases that call another alias of the plugin are expanded as zsh would, and
+`VAR=value` prefixes become `with-env` (global aliases too, when that is all
+they are). Aliases that need Oh My Zsh's own functions, other global aliases
+and names that would shadow a nushell command are skipped and listed in the
+file header.
 Names may clash with other plugins, as in Oh My Zsh; `omn sync` warns when
 two enabled plugins define the same name.
 """
@@ -26,6 +29,8 @@ PLUGINS = os.path.join(HERE, "..", "plugins")
 ALIAS_RE = re.compile(r"""^\s*alias\s+(-g\s+)?((?:'[^']+'|"[^"]+"|[^\s=]+))=(.*)$""")
 SIMPLE_WORD = re.compile(r"^[A-Za-z0-9_./:=@%+,~^-]+$")
 SHELL_SYNTAX = re.compile(r"[|&;<>()`$*?{}\[\]!]|\\")
+ENV_ASSIGN = re.compile(r"^[A-Za-z_]\w*=")
+ENV_ONLY = re.compile(r"^\s*([A-Za-z_]\w*=[^\s;&|<>()`$]*\s*)+$")
 ZSH_ONLY = re.compile(r"\bnoglob\b|\$\{\(|=\(|\(\(|\bsetopt\b|\$\+commands|\$commands\[")
 
 
@@ -62,6 +67,21 @@ def nu_name(name):
     return name if re.match(r"^[A-Za-z_][A-Za-z0-9_-]*$", name) else f"'{name}'"
 
 
+def expand(value, aliases, stack):
+    """zsh's alias expansion: the first word of each command, and the word after
+    an alias whose value ends with a space. An alias is not expanded inside its
+    own expansion (`rake='noglob rake'`)."""
+    def first(text):
+        m = re.match(r"(\s*)([^\s;&|()]+)(.*)$", text, re.S)
+        if not m or m.group(2) not in aliases or m.group(2) in stack:
+            return text
+        sub = aliases[m.group(2)]
+        rest = first(m.group(3)) if sub.endswith(" ") else m.group(3)
+        return m.group(1) + expand(sub, aliases, stack | {m.group(2)}) + rest
+    parts = re.split(r"(&&|\|\||\||;)", value)
+    return "".join(p if i % 2 else first(p) for i, p in enumerate(parts))
+
+
 def first_paragraph(readme):
     if not os.path.exists(readme):
         return ""
@@ -93,6 +113,7 @@ def port(omz_dir, plugin, builtins):
     for f in sorted(os.listdir(src_dir)):
         if f.endswith(".plugin.zsh") or (f.endswith(".zsh") and not f.startswith("_")):
             source += open(os.path.join(src_dir, f), errors="replace").read() + "\n"
+    source = source.replace("\\\n", "")  # continued lines
     functions = set(re.findall(r"(?m)^\s*(?:function\s+([\w:.-]+)|([\w:.-]+)\s*\(\)\s*\{?)", source))
     functions = {a or b for a, b in functions}
     # Plugin settings such as `zstyle ... || _omz_x_php=php` or `: ${VAR:=default}`.
@@ -112,7 +133,13 @@ def port(omz_dir, plugin, builtins):
         if m:
             name = m.group(2).strip("'\"")
             aliases.append((bool(m.group(1)), name, m.group(3)))
-    names = {n for _, n, _ in aliases}
+    values = {}
+    for is_global, name, raw in aliases:
+        value = zsh_value(raw)
+        if value is not None and not is_global:
+            for var, default in variables.items():
+                value = re.sub(r"\$\{?%s\}?(?!\w)" % re.escape(var), default, value)
+            values.setdefault(name, value)
 
     seen, out, skipped = set(), [], []
     firsts = collections.Counter()
@@ -123,9 +150,10 @@ def port(omz_dir, plugin, builtins):
         if value is not None:
             for var, default in variables.items():
                 value = re.sub(r"\$\{?%s\}?(?!\w)" % re.escape(var), default, value)
+            value = expand(value, values, {name})
             # nushell does not glob quoted or plain words the way zsh does
             value = re.sub(r"^\s*noglob\s+", "", value)
-        if is_global:
+        if is_global and not (value and ENV_ONLY.match(value)):
             skipped.append((name, "global alias"))
             continue
         if value is None or not value.strip():
@@ -140,8 +168,6 @@ def port(omz_dir, plugin, builtins):
             words = []
         refs = set(re.findall(r"[\w:.-]+", value))
         internal = (refs & functions) | {r for r in refs if r.startswith(("omz_", "_omz", "git_current_branch", "git_main_branch", "git_develop_branch"))}
-        if words and words[0] in names and words[0] != name:
-            internal.add(words[0])
         internal |= {"$" + v for v in re.findall(r"\$\{?([A-Za-z_]\w*)", value or "") if v in assigned}
         if internal:
             skipped.append((name, "uses " + ", ".join(sorted(internal))))
@@ -151,7 +177,25 @@ def port(omz_dir, plugin, builtins):
             head = words[1] if words[0] in ("sudo", "noglob", "command") and len(words) > 1 else words[0]
             firsts[head] += 1
         export_name = "main" if name == plugin else nu_name(name)
-        if words and not SHELL_SYNTAX.search(value) and not ZSH_ONLY.search(value):
+        if words and ENV_ASSIGN.match(words[0]) and not SHELL_SYNTAX.search(value):
+            # nushell has no `VAR=value cmd` in an alias: set it with with-env
+            env = {}
+            while words and ENV_ASSIGN.match(words[0]):
+                var, val = words.pop(0).split("=", 1)
+                env[var] = val
+            record = ", ".join(f"{var}: {json.dumps(val)}" for var, val in env.items())
+            if words:
+                quoted = [nu_quote(w) for w in words]
+                quoted[0] = "^" + quoted[0]
+                call = " ".join(quoted) + " ...$rest"
+            else:
+                call = "run-external ...$rest"
+            doc = " ".join(f"{var}={val}" for var, val in env.items())
+            out.append(
+                f"# {doc}{' ' + ' '.join(words) if words else ', then the command line'}\n"
+                f"export def --wrapped {export_name} [...rest] {{ with-env {{{record}}} {{ {call} }} }}"
+            )
+        elif words and not SHELL_SYNTAX.search(value) and not ZSH_ONLY.search(value):
             quoted = [nu_quote(w) for w in words]
             # Oh My Zsh means the external program, not nushell's `ps`, `du`...
             if words[0] in builtins or export_name == "main":

@@ -30,6 +30,9 @@ export def --wrapped yi [...args] { as-root (pm) install ...$args }
 # Remove packages
 export def --wrapped yr [...args] { as-root (pm) remove ...$args }
 
+# Remove packages with the dependencies nothing else needs
+export def --wrapped yrl [...args] { as-root (pm) remove --remove-leaves ...$args }
+
 # Upgrade packages
 export def --wrapped yu [...args] { as-root (pm) upgrade ...$args }
 

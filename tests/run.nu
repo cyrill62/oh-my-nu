@@ -317,7 +317,7 @@ def test-utils [dir: path] {
     assert equal (run-in "'{\"a\":[1]}' | pp_json | from json | to nuon") "{a: [1]}"
 
     # isodate
-    assert ((run-in "isodate") =~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$')
+    assert ((run-in "isodate") =~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4}$')
     assert ((run-in "isodate_basic_utc") =~ '^\d{8}T\d{6}Z$')
 
     # perms
@@ -532,6 +532,152 @@ esac
     }
 }
 
+# Oh My Zsh aliases that need more than a plain alias: binstubs, chained
+# aliases, env prefixes, renamed docker/podman/git commands, editors' launchers.
+def test-aliases [dir: path] {
+    mkdir $dir
+    let bin = $dir | path join bin
+    mkdir $bin
+    let opened = $dir | path join opened.txt
+    let fake = '#!/bin/sh
+name=$(basename "$0")
+case "$name $*" in
+  "docker ps --quiet"|"podman ps --quiet") printf "c1\nc2\n" ;;
+  "emacsclient -a  -n -e"*) echo nil ;;
+  "gvim --serverlist") echo GVIM ;;
+  "git rev-parse --show-toplevel") exit 1 ;;
+  "printenv"*) env | sed -n "s/^$1=//p" ;;
+  xdg-open*) echo "$1" >> OPENED ;;
+  *) echo "RAN $name $*" ;;
+esac
+' | str replace OPENED $opened
+    $fake | save ($bin | path join fake)
+    chmod +x ($bin | path join fake)
+    for name in [rails rake bundle hanami rvm mvn docker podman emacsclient subl gvim kamal shopify yarn xdg-open printenv] {
+        ^ln -sf fake ($bin | path join $name)
+    }
+    def run-in [names: list<string>, code: string] {
+        let use = $names | each {|name| $"use ($ROOT | path join plugins $'($name).nu' | to nuon) *" } | str join "; "
+        nu-run $"$env.PATH = \($env.PATH | prepend ($bin | to nuon)); ($use); ($code)" | get stdout | str trim
+    }
+
+    # generated: a chained alias, an env prefix, a continued line
+    assert equal (run-in [rvm] "gemsets") "RAN rvm gemset list"
+
+    # rvm use: a fake rvm tree. Set rvm_path and clear GEM_*: the user's own
+    # (inherited) must never be read or changed.
+    let rvm = $dir | path join rvm
+    for sub in [rubies/ruby-3.4.9/bin rubies/ruby-3.4.10/bin rubies/ruby-2.7.8/bin gems/ruby-3.4.10@app gems/ruby-3.4.10@global config] {
+        mkdir ($rvm | path join $sub)
+    }
+    "default=ruby-2.7.8\n" | save ($rvm | path join config/alias)
+    let rproj = $dir | path join rproj
+    mkdir ($rproj | path join sub)
+    "3.4\n" | save ($rproj | path join .ruby-version)
+    "app\n" | save ($rproj | path join .ruby-gemset)
+    let rvm_env = $"$env.rvm_path = ($rvm | to nuon); hide-env --ignore-errors GEM_HOME GEM_PATH RUBY_VERSION MY_RUBY_HOME"
+    let used = run-in [rvm] $"($rvm_env); cd ($rproj | path join sub | to nuon); rvm use; [$env.RUBY_VERSION $env.GEM_HOME $env.GEM_PATH \($env.PATH | first 3)] | to nuon" | lines | last | from nuon
+    assert equal $used [
+        ruby-3.4.10
+        ($rvm | path join gems/ruby-3.4.10@app)
+        $"($rvm | path join gems/ruby-3.4.10@app):($rvm | path join gems/ruby-3.4.10@global)"
+        [($rvm | path join gems/ruby-3.4.10@app/bin) ($rvm | path join gems/ruby-3.4.10@global/bin) ($rvm | path join rubies/ruby-3.4.10/bin)]
+    ]
+    let switched = run-in [rvm] $"($rvm_env); rvm use 3.4.10; rvm use default; [$env.RUBY_VERSION \($env.PATH | where { str starts-with ($rvm | path join rubies) } | length)] | to nuon" | lines | last | from nuon
+    assert equal $switched [ruby-2.7.8 1]
+    let system = run-in [rvm] $"($rvm_env); rvm use 2.7; rvm use system; [\($env.GEM_HOME? == null) \($env.PATH | where { str starts-with ($rvm | path join gems) } | is-empty)] | to nuon" | lines | last | from nuon
+    assert equal $system [true true]
+    let missing = try { run-in [rvm] $"($rvm_env); rvm use 3.4.9@nope"; "" } catch {|err| $err.msg }
+    assert str contains $missing "gemset ruby-3.4.9@nope does not exist"
+    assert equal (run-in [rvm] "rvm list") "RAN rvm list"
+
+    # rvm's cd hook: switch in a project, keep it inside, back to default outside,
+    # keep a manual choice outside projects, warn once for a missing ruby
+    mkdir ($dir | path join rplain)
+    mkdir ($dir | path join rbad)
+    "9.9\n" | save ($dir | path join rbad/.ruby-version)
+    let hook_code = [
+        $rvm_env
+        "let hook = $env.config.hooks.env_change.PWD | last"
+        "def state [] { [($env.RUBY_VERSION? | default none) ($env.GEM_HOME? | default none | path basename)] }"
+        $"do --env $hook null ($rproj | path join sub | to nuon); let a = state"
+        $"do --env $hook ($rproj | path join sub | to nuon) ($rproj | to nuon); let b = state"
+        $"do --env $hook ($rproj | to nuon) ($dir | path join rplain | to nuon); let c = state"
+        $"rvm use 3.4.9 | ignore; do --env $hook ($dir | path join rplain | to nuon) ($dir | to nuon); let d = state"
+        $"do --env $hook ($dir | to nuon) ($dir | path join rbad | to nuon); let e = state"
+        "[$a $b $c $d $e] | to nuon"
+    ] | str join "; "
+    let hooked = nu-run $"$env.PATH = \($env.PATH | prepend ($bin | to nuon)); use ($ROOT | path join plugins/rvm.nu | to nuon) *; ($hook_code)"
+    assert equal ($hooked.stdout | lines | last | from nuon) [
+        [ruby-3.4.10 ruby-3.4.10@app] [ruby-3.4.10 ruby-3.4.10@app] [ruby-2.7.8 ruby-2.7.8] [ruby-3.4.9 ruby-3.4.9] [ruby-3.4.9 ruby-3.4.9]
+    ]
+    assert str contains $hooked.stderr "rvm: ruby-9.9 is not installed"
+    assert equal (run-in [hanami] "hdtp; HET printenv HANAMI_ENV") "RAN hanami db prepare\ntest"
+    assert equal (run-in [yarn] "yuil") "RAN yarn upgrade-interactive"
+
+    # rails / rake: the project's binstub, bundler, or the installed tool
+    let app = $dir | path join app
+    mkdir ($app | path join bin)
+    "#!/bin/sh\necho \"STUB $*\"\n" | save ($app | path join bin/rails)
+    chmod +x ($app | path join bin/rails)
+    "" | save ($app | path join Gemfile)
+    let in_app = $"cd ($app | to nuon)"
+    assert equal (run-in [rails] $"($in_app); rc") "STUB console"
+    assert equal (run-in [rails] $"($in_app); rdm cache STEP=2") "STUB db:migrate:cache STEP=2"
+    assert equal (run-in [rails] $"($in_app); rdm --trace") "STUB db:migrate --trace"
+    assert equal (run-in [rails] $"($in_app); rkdm") "RAN bundle exec rake db:migrate"
+    assert equal (run-in [rails] $"cd ($dir | to nuon); rs; rake -T") "RAN rails server\nRAN rake -T"
+    assert equal (run-in [rails] "RET printenv RAILS_ENV") "test"
+
+    # mvn: the nearest mvnw, else mvn
+    let mvnp = $dir | path join mvnp
+    mkdir ($mvnp | path join sub)
+    "#!/bin/sh\necho \"WRAPPER $*\"\n" | save ($mvnp | path join mvnw)
+    chmod +x ($mvnp | path join mvnw)
+    assert equal (run-in [mvn] $"cd ($mvnp | path join sub | to nuon); mvnci") "WRAPPER clean install"
+    assert equal (run-in [mvn] $"cd ($dir | to nuon); mvnci; mvn! -q") "RAN mvn clean install\nRAN mvn -f ./pom.xml -q"
+
+    # docker, podman: Oh My Zsh's names
+    assert equal (run-in [docker] "drit alpine; dlo web; dsta") "RAN docker container run --interactive --tty alpine\nRAN docker container logs web\nRAN docker stop c1 c2"
+    assert equal (run-in [docker] "dclF") "RAN docker compose logs --follow --tail 0"
+    assert equal (run-in [podman] "pr alpine; prm! web; psta") "RAN podman container run alpine\nRAN podman container rm --force web\nRAN podman stop c1 c2"
+
+    # git: develop and main branches, in a scratch repository
+    let repo = $dir | path join repo
+    mkdir $repo
+    cd $repo
+    ^git init --quiet --initial-branch=main
+    ^git config user.email t@example.invalid
+    ^git config user.name tester
+    ^git commit --quiet --allow-empty --message first
+    ^git branch devel
+    assert equal (run-in [git] $"cd ($repo | to nuon); git-develop-branch") "devel"
+    run-in [git] $"cd ($repo | to nuon); gcd out+err> /dev/null; gswm out+err> /dev/null" | ignore
+    assert equal (^git branch --show-current | str trim) "main"
+    run-in [git] $"cd ($repo | to nuon); gcd out+err> /dev/null" | ignore
+    assert equal (^git branch --show-current | str trim) "devel"
+    cd $dir
+
+    # emacs: a new frame when none is open
+    assert equal (run-in [emacs] "emacs a.txt") "RAN emacsclient --alternate-editor= --create-frame --no-wait a.txt"
+    # sublime: projects
+    let proj = $dir | path join proj
+    mkdir ($proj | path join .git)
+    mkdir ($proj | path join sub)
+    assert equal (run-in [sublime] $"cd ($proj | path join sub | to nuon); stp") $"RAN subl ($proj)"
+    run-in [sublime] $"stn ($proj | to nuon)" | ignore
+    assert equal (open --raw ($proj | path join proj.sublime-project) | from json | get folders.0.path) "."
+    assert equal (run-in [sublime] $"cd ($proj | path join sub | to nuon); stp") $"RAN subl ($proj | path join proj.sublime-project)"
+    # vim-interaction, kamal, shopify
+    assert equal (run-in [vim-interaction] "cd /tmp; vvsp 'a b'") "RAN gvim --servername GVIM --remote-send :vsp<cr>:args! /tmp/a\\ b<cr>"
+    assert equal (run-in [kamal] "kad") "RAN kamal deploy"
+    assert equal (run-in [shopify] "shop theme dev") "RAN shopify theme dev"
+
+    # web-search: Oh My Zsh's engines, bangs and home pages
+    run-in [web-search] "google nu shell; ddg; wiki rust; rscrate serde" | ignore
+    assert equal (open --raw $opened | lines) ["https://www.google.com/search?q=nu%20shell" "https://www.duckduckgo.com" "https://www.duckduckgo.com/?q=%21w%20rust" "https://crates.io/search?q=serde"]
+}
+
 # The web installer (www/public/install.nu), on a local fake release.
 def test-get [dir: path] {
     let version = "9.9.9"
@@ -598,6 +744,7 @@ def main [] {
         [utils, {|| test-utils ($dir | path join utils-test) }]
         [git-flow, {|| test-git-flow ($dir | path join git-flow-test) }]
         [ports, {|| test-ports ($dir | path join ports-test) }]
+        [aliases, {|| test-aliases ($dir | path join aliases-test) }]
         [get, {|| test-get ($dir | path join get-test) }]
     ]
     let failed = $tests | each {|t|

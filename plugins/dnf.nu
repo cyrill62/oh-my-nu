@@ -16,6 +16,9 @@ export def --wrapped dnfmc [...args] { as-root dnf makecache ...$args }
 # Upgrade packages
 export def --wrapped dnfu [...args] { as-root dnf upgrade ...$args }
 
+# Refresh the metadata, then upgrade
+export def --wrapped dnfur [...args] { as-root dnf upgrade --refresh ...$args }
+
 # Install packages
 export def --wrapped dnfi [...args] { as-root dnf install ...$args }
 

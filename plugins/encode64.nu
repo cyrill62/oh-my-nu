@@ -10,6 +10,9 @@ export def decode64 [text?: string] { let input = $in; $text | default $input | 
 # base64-encode a file
 export def encodefile64 [file: path] { open --raw $file | encode base64 }
 
+# base64-encode a file
+export def ef64 [file: path] { encodefile64 $file }
+
 # base64-encode the argument or the input
 export def e64 [text?: string] { let input = $in; $text | default $input | encode base64 }
 

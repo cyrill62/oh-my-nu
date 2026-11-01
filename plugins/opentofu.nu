@@ -18,7 +18,13 @@ export alias tts = tofu state
 export alias ttsl = tofu state list
 export alias ttt = tofu test
 export alias ttsh = tofu show
-export alias ttw = tofu workspace
+export alias ttap = tofu apply -parallelism=1
+export alias ttapp = tofu apply tfplan
+export alias ttir = tofu init -reconfigure
+export alias ttiur = tofu init -upgrade -reconfigure
+export alias ttpo = tofu plan -out tfplan
+export alias ttr = tofu refresh
+export alias ttws = tofu workspace
 
 # Outputs as a record
 export def ttot [] { ^tofu output -json | from json | transpose name info | each {|o| {name: $o.name, value: $o.info.value, sensitive: $o.info.sensitive} } }

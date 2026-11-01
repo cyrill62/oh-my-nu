@@ -65,4 +65,23 @@ def config-file [] {
 export def trl [] { run-external (mux) source-file (config-file) }
 
 # Edit the config
-export def trc [] { run-external ($env.EDITOR? | default vi) (config-file) }
+export def tmuxconf [] { run-external ($env.EDITOR? | default vi) (config-file) }
+
+# Attach to this directory's session, creating it: named after the directory
+# and a hash of its full path
+export def tds [] {
+    let dir = $env.PWD | path basename | str replace --all --regex '[.:]' '_' | str replace --regex '^[$@%=]' '_'
+    let hash = $env.PWD | hash md5 | str substring 0..5
+    run-external (mux) new-session '-A' '-s' $"($dir)-($hash)"
+}
+
+# tmux; without arguments, attach to a session or start one
+export def --wrapped tmux [...args] {
+    if ($args | is-not-empty) {
+        ^tmux ...$args
+    } else if (do { ^tmux has-session } | complete).exit_code == 0 {
+        ^tmux attach
+    } else {
+        ^tmux new-session
+    }
+}

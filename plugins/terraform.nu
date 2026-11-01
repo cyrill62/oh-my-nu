@@ -19,6 +19,14 @@ export alias tfsl = terraform state list
 export alias tft = terraform test
 export alias tfsh = terraform show
 export alias tfw = terraform workspace
+export alias tfap = terraform apply -parallelism=1
+export alias tfapp = terraform apply tfplan
+export alias tfdp = terraform destroy -parallelism=1
+export alias tfir = terraform init -reconfigure
+export alias tfiur = terraform init -upgrade -reconfigure
+export alias tfpo = terraform plan -out tfplan
+export alias tfwl = terraform workspace list
+export alias tfws = terraform workspace select
 
 # Outputs as a record
 export def tfot [] { ^terraform output -json | from json | transpose name info | each {|o| {name: $o.name, value: $o.info.value, sensitive: $o.info.sensitive} } }

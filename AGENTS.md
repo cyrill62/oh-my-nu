@@ -10,7 +10,7 @@ Notes for AI coding agents (and people) working on oh-my-nu. Read
 | `oh-my-nu.nu` | the `omn` manager module (enable, disable, sync, list, help...) |
 | `install.nu` | `nu install.nu [PLUGIN...]`: enables a default set |
 | `www/public/install.nu` | the web installer (`nu -c (http get .../install.nu)`): downloads the latest release into `~/.local/share/oh-my-nu`, then runs `install.nu` |
-| `lib/root.nu` | shared helpers: `as-root`, `c-locale`, `open-url`, `random-fortune`, `omz-plugin-dir`, `clipcopy` |
+| `lib/root.nu` | shared helpers: `as-root`, `c-locale`, `open-url`, `random-fortune`, `omz-plugin-dir`, `clipcopy`, `clippaste` |
 | `plugins/*.nu` | one nushell module per plugin |
 | `tools/port-omz.py` | generates plugins from Oh My Zsh's alias plugins |
 | `tools/coverage.py` | writes `COVERAGE.md` (every Oh My Zsh plugin and how it's covered) |

@@ -55,3 +55,17 @@ export def clipcopy [text: string] {
     if $tool == null { error make --unspanned {msg: "no clipboard tool (wl-copy, xclip, xsel or pbcopy)"} }
     $text | run-external $tool.bin ...$tool.args
 }
+
+# The clipboard's text, with wl-paste, xclip, xsel or pbpaste
+export def clippaste [] {
+    let tools = [
+        [bin, args];
+        [wl-paste, [--no-newline]]
+        [xclip, [-selection clipboard -out]]
+        [xsel, [--clipboard --output]]
+        [pbpaste, []]
+    ]
+    let tool = $tools | where {|t| which $t.bin | is-not-empty } | get --optional 0
+    if $tool == null { error make --unspanned {msg: "no clipboard tool (wl-paste, xclip, xsel or pbpaste)"} }
+    run-external $tool.bin ...$tool.args
+}
